@@ -1,6 +1,7 @@
 package loadeljson
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -27,6 +28,7 @@ var (
 	MySQLCfgPath  string
 	InfluxCfgPath string
 	Parallelism   int
+	IsNDJSON      bool
 
 	runRecorders             = make([]stage.RunRecorder, 0, 3)
 	queryResults             = make([]*stage.QueryResult, 0, 8)
@@ -126,7 +128,11 @@ func Run(_ *cobra.Command, args []string) {
 func scheduleFile(ctx context.Context, path string) {
 	parallelismGuard <- struct{}{}
 	runningTasks.Add(1)
-	go processFile(ctx, path)
+	if IsNDJSON {
+		go processNDJSONFile(ctx, path)
+	} else {
+		go processFile(ctx, path)
+	}
 }
 
 func processFile(ctx context.Context, path string) {
@@ -142,30 +148,89 @@ func processFile(ctx context.Context, path string) {
 		return
 	}
 
+	processJSONBytes(ctx, path, bytes, 0)
+}
+
+func processNDJSONFile(ctx context.Context, path string) {
+	defer func() {
+		// Allow another task runner to start.
+		<-parallelismGuard
+		runningTasks.Done()
+	}()
+
+	file, err := os.Open(path)
+	if err != nil {
+		log.Error().Err(err).Str("path", path).Msg("failed to open NDJSON file")
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	// Increase buffer size to handle large JSON lines (default is 64KB, we set to 10MB)
+	const maxCapacity = 10 * 1024 * 1024 // 10MB
+	buf := make([]byte, maxCapacity)
+	scanner.Buffer(buf, maxCapacity)
+
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		if ctx.Err() != nil {
+			log.Info().Str("path", path).Msg("abort processing NDJSON file")
+			break
+		}
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		processJSONBytes(ctx, path, line, lineNum)
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Error().Err(err).Str("path", path).Msg("error reading NDJSON file")
+	}
+}
+
+func processJSONBytes(ctx context.Context, path string, jsonBytes []byte, lineNum int) {
 	queryEvent := new(QueryEvent)
 	// Note that this step can succeed with any valid JSON file. But we need to do some additional validation to skip
 	// invalid event listener JSON files.
-	if unmarshalErr := json.Unmarshal(bytes, queryEvent); unmarshalErr != nil {
-		log.Error().Err(unmarshalErr).Str("path", path).Msg("failed to unmarshal JSON")
+	if unmarshalErr := json.Unmarshal(jsonBytes, queryEvent); unmarshalErr != nil {
+		if lineNum > 0 {
+			log.Error().Err(unmarshalErr).Str("path", path).Int("line", lineNum).Msg("failed to unmarshal JSON")
+		} else {
+			log.Error().Err(unmarshalErr).Str("path", path).Msg("failed to unmarshal JSON")
+		}
 		return
 	}
 
 	// Validate that this is a QueryCompletedEvent
 	if queryEvent.QueryCompletedEvent == nil {
-		log.Error().Str("path", path).Msg("no QueryCompletedEvent found in file")
+		if lineNum > 0 {
+			log.Error().Str("path", path).Int("line", lineNum).Msg("no QueryCompletedEvent found")
+		} else {
+			log.Error().Str("path", path).Msg("no QueryCompletedEvent found in file")
+		}
 		return
 	}
 
 	qce := queryEvent.QueryCompletedEvent
 	if qce.Metadata.QueryId == "" || qce.CreateTime.Time.IsZero() {
-		log.Error().Str("path", path).Msg("invalid QueryCompletedEvent: missing queryId or createTime")
+		if lineNum > 0 {
+			log.Error().Str("path", path).Int("line", lineNum).Msg("invalid QueryCompletedEvent: missing queryId or createTime")
+		} else {
+			log.Error().Str("path", path).Msg("invalid QueryCompletedEvent: missing queryId or createTime")
+		}
 		return
 	}
 
 	// Copy the Plan from QueryEvent to QueryMetadata
 	qce.Metadata.Plan = &queryEvent.Plan
 
-	log.Info().Str("path", path).Msg("start to process event listener file")
+	if lineNum > 0 {
+		log.Info().Str("path", path).Int("line", lineNum).Msg("start to process event listener line")
+	} else {
+		log.Info().Str("path", path).Msg("start to process event listener file")
+	}
 
 	queryId := qce.Metadata.QueryId
 	if RecordRun {
@@ -216,7 +281,11 @@ func processFile(ctx context.Context, path string) {
 	// Insert into MySQL if configured
 	if mysqlDb != nil {
 		if err := insertEventListenerData(ctx, mysqlDb, qce, queryId); err != nil {
-			log.Error().Err(err).Str("path", path).Msg("failed to insert event listener record")
+			if lineNum > 0 {
+				log.Error().Err(err).Str("path", path).Int("line", lineNum).Msg("failed to insert event listener record")
+			} else {
+				log.Error().Err(err).Str("path", path).Msg("failed to insert event listener record")
+			}
 			return
 		}
 	}
@@ -225,7 +294,11 @@ func processFile(ctx context.Context, path string) {
 		r.RecordQuery(utils.GetCtxWithTimeout(time.Second*5), pseudoStage, queryResult)
 	}
 
-	log.Info().Str("path", path).Str("query_id", queryId).Msg("success")
+	if lineNum > 0 {
+		log.Info().Str("path", path).Int("line", lineNum).Str("query_id", queryId).Msg("success")
+	} else {
+		log.Info().Str("path", path).Str("query_id", queryId).Msg("success")
+	}
 	resultChan <- queryResult
 }
 

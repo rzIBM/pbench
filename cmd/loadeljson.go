@@ -42,6 +42,7 @@ func init() {
 	loadElJsonCmd.Flags().IntVarP(&loadeljson.Parallelism, "parallel", "P", runtime.NumCPU(), "Number of parallel threads to load json files")
 	loadElJsonCmd.Flags().StringVar(&loadeljson.InfluxCfgPath, "influx", "", "InfluxDB connection config for run recorder (optional)")
 	loadElJsonCmd.Flags().StringVar(&loadeljson.MySQLCfgPath, "mysql", "", "MySQL connection config for event listener and run recorder (optional)")
+	loadElJsonCmd.Flags().BoolVar(&loadeljson.IsNDJSON, "ndjson", false, "Process files as NDJSON (newline-delimited JSON) format")
 }
 
 // Made with Bob
