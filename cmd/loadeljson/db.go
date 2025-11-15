@@ -39,7 +39,7 @@ func insertEventListenerData(ctx context.Context, db *sql.DB, qce *QueryComplete
 }
 
 func insertQueryCreationInfo(ctx context.Context, db *sql.DB, qce *QueryCompletedEvent, queryId string) error {
-	query := `INSERT INTO presto_query_creation_info(
+	query := `REPLACE INTO presto_query_creation_info(
 		query_id, query, create_time, schema_name, catalog_name, environment,
 		user, remote_client_address, source, user_agent, uri,
 		session_properties_json, server_version, client_info, resource_group_name,
@@ -113,7 +113,7 @@ func insertQueryCreationInfo(ctx context.Context, db *sql.DB, qce *QueryComplete
 }
 
 func insertQueryPlans(ctx context.Context, db *sql.DB, qce *QueryCompletedEvent, queryId string) error {
-	query := `INSERT INTO presto_query_plans(
+	query := `REPLACE INTO presto_query_plans(
 		query_id, query, plan, json_plan, environment, dt
 	) VALUES (?, ?, ?, ?, ?, ?)`
 
@@ -139,7 +139,7 @@ func insertQueryStageStats(ctx context.Context, db *sql.DB, qce *QueryCompletedE
 		return nil
 	}
 
-	query := `INSERT INTO presto_query_stage_stats(
+	query := `REPLACE INTO presto_query_stage_stats(
 		query_id, stage_id, stage_execution_id, tasks,
 		total_scheduled_time_ms, total_cpu_time_ms, retried_cpu_time_ms, total_blocked_time_ms,
 		raw_input_data_size_bytes, processed_input_data_size_bytes, physical_written_data_size_bytes,
@@ -179,7 +179,7 @@ func insertQueryOperatorStats(ctx context.Context, db *sql.DB, qce *QueryComplet
 		return nil
 	}
 
-	query := `INSERT INTO presto_query_operator_stats(
+	query := `REPLACE INTO presto_query_operator_stats(
 		query_id, stage_id, stage_execution_id, pipeline_id, operator_id,
 		plan_node_id, operator_type, total_drivers,
 		add_input_calls, add_input_wall_ms, add_input_cpu_ms, add_input_allocation_bytes,
@@ -229,7 +229,7 @@ func insertQueryStatistics(ctx context.Context, db *sql.DB, qce *QueryCompletedE
 	// Insert into presto_query_statistics table
 	// This mirrors the Java implementation in PrestoQueryStatsDao.insertQueryStatistics
 
-	query := `INSERT INTO presto_query_statistics(
+	query := `REPLACE INTO presto_query_statistics(
 		query_id, query, query_type, schema_name, catalog_name, environment,
 		user, remote_client_address, source, user_agent, uri,
 		session_properties_json, server_version, client_info, resource_group_name,
