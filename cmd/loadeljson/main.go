@@ -309,25 +309,45 @@ func processPath(ctx context.Context, path string) error {
 		return err
 	}
 	if !stat.IsDir() {
+		// Skip dot files
+		if filepath.Base(path)[0] == '.' {
+			log.Debug().Str("path", path).Msg("skipping dot file")
+			return nil
+		}
 		scheduleFile(ctx, path)
 		return nil
 	}
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
+
+	// Process directory recursively
+	return filepath.WalkDir(path, func(filePath string, d os.DirEntry, err error) error {
+		if err != nil {
+			log.Error().Err(err).Str("path", filePath).Msg("error walking directory")
+			return nil // Continue walking despite errors
+		}
+
 		if ctx.Err() != nil {
 			log.Info().Msg("abort task scheduling")
-			break
+			return filepath.SkipAll
 		}
-		if entry.IsDir() {
-			continue
+
+		// Skip dot files and dot directories
+		name := d.Name()
+		if name[0] == '.' {
+			if d.IsDir() {
+				log.Debug().Str("path", filePath).Msg("skipping dot directory")
+				return filepath.SkipDir
+			}
+			log.Debug().Str("path", filePath).Msg("skipping dot file")
+			return nil
 		}
-		fullPath := filepath.Join(path, entry.Name())
-		scheduleFile(ctx, fullPath)
-	}
-	return nil
+
+		// Only schedule regular files
+		if !d.IsDir() {
+			scheduleFile(ctx, filePath)
+		}
+
+		return nil
+	})
 }
 
 func registerRunRecorder(r stage.RunRecorder) {
