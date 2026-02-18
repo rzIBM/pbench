@@ -65,7 +65,7 @@ VALUES (?, ?, ?, 0, 0, 0, ?) ON DUPLICATE KEY UPDATE queries_ran = VALUES(querie
 }
 
 func (m *MySQLRunRecorder) RecordQuery(_ context.Context, s *Stage, result *QueryResult) {
-	recordNewQuery := `REPLACE INTO pbench_queries (run_id, stage_id, query_file, query_index, query_id, sequence_no,
+	recordNewQuery := `INSERT INTO pbench_queries (run_id, stage_id, query_file, query_index, query_id, sequence_no,
 cold_run, succeeded, start_time, end_time, row_count, expected_row_count, duration_ms, info_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	var queryFile string
 	if result.Query.File != nil {
