@@ -49,8 +49,8 @@ func NewMySQLRunRecorderWithDb(db *sql.DB) *MySQLRunRecorder {
 }
 
 func (m *MySQLRunRecorder) Start(_ context.Context, s *Stage) error {
-	recordNewRun := `REPLACE INTO pbench_runs (run_name, cluster_fqdn, start_time, queries_ran, failed, mismatch, comment)
-VALUES (?, ?, ?, 0, 0, 0, ?)`
+	recordNewRun := `INSERT INTO pbench_runs (run_name, cluster_fqdn, start_time, queries_ran, failed, mismatch, comment)
+VALUES (?, ?, ?, 0, 0, 0, ?) ON DUPLICATE KEY UPDATE queries_ran = VALUES(queries_ran), failed = VALUES(failed), mismatch = VALUES(mismatch)`
 	res, err := m.db.Exec(recordNewRun, s.States.RunName, s.States.ServerFQDN, s.States.RunStartTime, s.States.Comment)
 	if err != nil {
 		log.Error().Err(err).Str("run_name", s.States.RunName).Time("start_time", s.States.RunStartTime).
