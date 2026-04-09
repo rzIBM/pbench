@@ -1,6 +1,6 @@
 -- q96.sql
 
-selec  count(*) 
+select  count(*) 
 from store_sales
     ,household_demographics 
     ,time_dim, store
